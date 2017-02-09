@@ -7,6 +7,7 @@ MinJae Cho
  
 ##Link to GitHub Pages site
  - https://pennvr.github.io/three-js-minjaec/
+
 ##Techniques used, and why those techniques
 
 ##Instructions on building/assembling/etc. Also document how to run the code
