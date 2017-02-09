@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>MinJae THREE.js Project</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+		<style>
+			body {
+				font-family: Helvetica, Arial, sans-serif;
+				background-color: #fff;
+				color: #000;
+				margin: 0px;
+				height: 100%;
+			}
+		</style>
+	</head>
+	<body>
+		<script src="js/three.min.js"></script>
+		<script src="js/PointerLockControl.js"></script>
+		<script src="js/VREffects.js"></script>
+		<script src="js/VRControls.js"></script>
+		<script src="js/webVR.js"></script>
+		<script src="js/minjae.noise.js"></script>
+		<div id = "blocker">
+			<div style= "margin: 10pt" id="instructions">
+					<span style="font-size:32px"><b>Click to play</b></span><br>
+					Move your mouse or look around
+			</div>
+		</div>
+		<script>
+
+			var effect, ctr, noiseScale, subdivs, waterlevel;
+			var fireworks, fireworkInterval;
+			var light, bufferTexture, camera, scene, vrcontrols, controls, renderer;
+			var noise, terrain, geometry, water, terrainBaseHue;
+			var blocker = document.getElementById( 'blocker' );
+			var instructions = document.getElementById( 'instructions' );
+			
+			// using code from Trung's demo for PointerLockControl
+			// http://www.html5rocks.com/en/tutorials/pointerlock/intro/
+			var havePointerLock = 'pointerLockElement' in document || 'mozPointerLockElement' in document || 'webkitPointerLockElement' in document;
+			if ( havePointerLock ) {
+				var element = document.body;
+				var pointerlockchange = function ( event ) {
+					if ( document.pointerLockElement === element || document.mozPointerLockElement === element || document.webkitPointerLockElement === element ) {
+						controls.enabled = true;
+						blocker.style.display = 'none';
+					} else {
+						controls.enabled = false;
+						blocker.style.display = '-webkit-box';
+						blocker.style.display = '-moz-box';
+						blocker.style.display = 'box';
+						instructions.style.display = '';
+					}
+				};
+				var pointerlockerror = function ( event ) {
+					instructions.style.display = '';
+				};
+
+				// Hook pointer lock state change events
+				document.addEventListener( 'pointerlockchange', pointerlockchange, false );
+				document.addEventListener( 'mozpointerlockchange', pointerlockchange, false );
+				document.addEventListener( 'webkitpointerlockchange', pointerlockchange, false );
+				document.addEventListener( 'pointerlockerror', pointerlockerror, false );
+				document.addEventListener( 'mozpointerlockerror', pointerlockerror, false );
+				document.addEventListener( 'webkitpointerlockerror', pointerlockerror, false );
+
+				instructions.style.display = 'none';
+				
+				// Ask the browser to lock the pointer
+				element.requestPointerLock = element.requestPointerLock || element.mozRequestPointerLock || element.webkitRequestPointerLock;
+				element.requestPointerLock();
+
+				instructions.addEventListener( 'click', function ( event ) {
+					instructions.style.display = 'none';
+					// Ask the browser to lock the pointer
+					element.requestPointerLock = element.requestPointerLock || element.mozRequestPointerLock || element.webkitRequestPointerLock;
+					element.requestPointerLock();
+				}, false );
+			} else {
+				instructions.innerHTML = 'Your browser doesn\'t seem to support Pointer Lock API';
+			}
+
+			init();
+			animate();
+
+			if ( WEBVR.isAvailable() === false ) {
+				instructions.appendChild( WEBVR.getMessage() );
+			}
+
+			function init() {		
+				//camera
+				camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 1, 1000 );
+
+				//scene
+				scene = new THREE.Scene();
+
+				//controls
+				controls = new THREE.PointerLockControls( camera );
+				scene.add( controls.getObject() );
+
+				//light
+				light = new THREE.HemisphereLight( 0xeeeeff, 0x777788, 0.75 );
+				light.position.set( 0.5, 1, 0.75 );
+				scene.add( light );
+
+				//raycaster
+				raycaster = new THREE.Raycaster();
+
+				//terrain
+				const terrainSideLength = 2000;
+				subdivs = 20;
+				noiseScale = 200;
+				waterlevel = 2.7;
+				noise = new noiseGen(subdivs, noiseScale);
+				geometry = new THREE.PlaneGeometry( terrainSideLength, terrainSideLength, subdivs, subdivs );
+				terrainBaseHue = Math.random();
+				generateTerrain();
+				geometry.rotateX( - Math.PI / 2 );
+				geometry.rotateY( Math.PI*Math.random());
+				terrain = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({vertexColors: THREE.VertexColors}));
+				water = new THREE.Mesh(new THREE.PlaneGeometry(terrainSideLength,terrainSideLength,0,0).rotateX( - Math.PI / 2 ), 
+											new THREE.MeshBasicMaterial({ color: 0x3333ee}));
+				terrain.position.setY(-noiseScale);
+				water.position.setY(-noiseScale/waterlevel);
+				scene.add( terrain );
+				scene.add( water );
+
+				//fireworks
+				fireworks = new Array();
+				ctr = new THREE.Vector3();
+				fireworkInterval = 3000;
+				var timer = setInterval(shootFireworks, fireworkInterval);
+
+				//VR STUFF
+				if ( WEBVR.isAvailable() === true ) {
+					vrcontrols = new THREE.VRControls( camera );
+					document.body.appendChild( WEBVR.getButton( effect ) );
+				}
+
+
+				//renderer
+				renderer = new THREE.WebGLRenderer({ antialias: true });
+				renderer.setClearColor( 0xffffff );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight);
+				effect = new THREE.VREffect( renderer );
+				document.body.appendChild( renderer.domElement );
+
+			}
+
+			function shootFireworks() {
+				var scalar = 1000;
+				var fwg = new THREE.Geometry();
+				var fwm = new THREE.PointsMaterial( { size: 25, vertexColors: THREE.VertexColors} );
+				fwg.vertices.push(new THREE.Vector3());
+				fwg.colors[0] = randomColor();
+				var fw = new THREE.Points(fwg, fwm);
+				fw.position.add(new THREE.Vector3((Math.random()-0.5)*scalar, water.position.y, (Math.random()-0.5)*scalar));
+				scene.updateMatrixWorld();
+				fireworks.push(fw);
+				scene.add(fw);
+			}
+
+			function generateFireworkExplosion(fwi) {
+				fireworks[fwi].geometry.vertices.splice(0, fireworks[fwi].geometry.vertices.length);
+				var baseColor = randomColor();
+				for (var i = 0; i < 12; i ++) {
+					newvtx = new THREE.Vector3();
+					newvtx.setX(fireworks[fwi].position.x);
+					newvtx.setY(fireworks[fwi].position.y);
+					newvtx.setZ(fireworks[fwi].position.z);
+					fireworks[fwi].geometry.vertices.push(newvtx);
+					fireworks[fwi].geometry.colors[i] = variedColor(baseColor);
+				}
+				fireworks[fwi].geometry.verticesNeedUpdate = true;
+				fireworks[fwi].geometry.dynamic = true;
+				scene.remove(fireworks[fwi]);
+				scene.add(fireworks[fwi]);
+			}
+
+			function tickFireworks() {
+				var deleteIdx = new Array();
+				for(var i = 0; i < fireworks.length; i++) {
+					var fwheight = fireworks[i].position.y;
+					if (fireworks[i].geometry.vertices.length === 1 && fwheight > 500) {
+						generateFireworkExplosion(i);
+					} else if (fireworks[i].geometry.vertices.length === 1) {
+						fireworks[i].position.y += 4;
+					} else if(fireworks[i].geometry.vertices.length > 1) {
+						fireworkExplosionTick(fireworks[i]);
+						fireworks[i].position.y += 2;
+					}
+
+					if(fireworks[i].position.y >= 700) {
+						deleteIdx.push(i);
+					}
+				}
+
+				for(var i = 0; i < deleteIdx.length; i++) {
+					scene.remove(fireworks[deleteIdx[i]]);
+					fireworks.splice(deleteIdx[i], 1);
+				}
+			}
+
+			function fireworkExplosionTick (fwobj) {
+				fwobj.geometry.verticesNeedUpdate = true;
+				var deleteIdx = new Array();
+				var fwctr = fwobj.position;
+				var movementScalar = 2;
+				var disappearingDist = 100;
+				for (var i = 0; i < fwobj.geometry.vertices.length; i++) {
+					var dis2ctr = ctr.distanceTo(fwobj.geometry.vertices[i]);
+					if (dis2ctr >= disappearingDist) {
+						deleteIdx.push(i);
+					} else {
+						fwobj.geometry.colors[i].setHSL(fwobj.geometry.colors[i].getHSL().h,fwobj.geometry.colors[i].getHSL().s + Math.random(), (dis2ctr/disappearingDist));
+					}
+					fwobj.geometry.vertices[i].add(movementScalar * fwobj.geometry.vertices[i]);
+				}
+
+				for(var i = 0; i < deleteIdx.length; i++) {
+					fwobj.geometry.vertices.splice(deleteIdx[i], 1);
+				}
+			}
+
+			function variedColor(baseColor) {
+				var variationScalar = 0.1;
+				var result = baseColor.clone().offsetHSL(Math.random()*variationScalar,Math.random()*variationScalar,Math.random()*variationScalar);
+				return result;
+			}
+
+			function randomColor() {
+				var c = new THREE.Color();
+				c.setHSL(Math.random(),Math.random(),Math.random());
+				return c;
+			}
+
+			function generateTerrain() {
+				var faceCount = subdivs*subdivs*2;
+				var vertexIdx;
+				for (var i = 0; i < geometry.vertices.length; i++) {
+					geometry.vertices[i].z = noise.getHeightAt(i) ;
+				}
+				for(var i = 0; i < faceCount; i++) {
+						vertexIdx = Math.floor(i/4);
+						geometry.faces[i].vertexColors[0] = heightBasedColor(geometry.vertices[geometry.faces[i].a].z);
+						geometry.faces[i].vertexColors[1] = heightBasedColor(geometry.vertices[geometry.faces[i].b].z);
+						geometry.faces[i].vertexColors[2] = heightBasedColor(geometry.vertices[geometry.faces[i].c].z);
+				}
+			}
+
+			function heightBasedColor(height) {
+				var a = (noiseScale + height) / 2;
+				var h = terrainBaseHue + (noiseScale - a)/noiseScale;
+				var s = a/noiseScale - 0.2;
+				var l = (1 + Math.sin(2*Math.PI/noiseScale*a)/2);
+				var c = new THREE.Color();
+				c.setHSL(h,s,l);
+				return c;
+			}
+
+			function animate() {
+				tickFireworks();
+				var center = new THREE.Vector2();
+				raycaster.setFromCamera(center, camera);
+				requestAnimationFrame( animate );
+				if ( WEBVR.isAvailable() === true ) vrcontrols.update();
+				effect.render(scene, camera);
+			}
+
+			//making the window resizable
+			//source: http://stackoverflow.com/questions/20290402/three-js-resizing-canvas
+			window.addEventListener('resize', onResize, false);
+			function onResize(){
+				camera.aspect = window.innerWidth/window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize(window.innerWidth, window.innerHeight);
+			}
+			
+			
+		</script>
+	</body>
+</html>
