@@ -2,25 +2,25 @@ Three.js Project
 CIS 568-002: Virtual Reality Practicum, Spring 2017  
 MinJae Cho
 
-##Name and Project Name
+## Name and Project Name
  - MinJae Cho, THREE.js project.
  
-##Link to GitHub Pages site
+## Link to GitHub Pages site
  - https://pennvr.github.io/three-js-minjaec/
 
-##Techniques used, and why those techniques
+## Techniques used, and why those techniques
 
-##Instructions on building/assembling/etc. Also document how to run the code
+## Instructions on building/assembling/etc. Also document how to run the code
  - Download and open index.html using a webVR compatible browser.
  
-##When in VR mode, did you feel any motion sickness? Why and why not?
+## When in VR mode, did you feel any motion sickness? Why and why not?
  - I was unable to test VR mode.
  
-##What was the hardest part of the assignment?
+## What was the hardest part of the assignment?
  - Getting the fireworks to explode.
  
-##What do you wish you’d done differently?
+## What do you wish you’d done differently?
  - I wish I had known about the linear interpolaton function in the Vector object sooner.
  
-##What do you wish we had done differently?
+## What do you wish we had done differently?
  - Nothing
